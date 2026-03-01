@@ -1,0 +1,31 @@
+#+TITLE: Test Org File
+#+TODO: TODO NEXT WAITING | DONE CANCELLED
+
+* TODO [#A] Buy groceries :shopping:
+SCHEDULED: <2024-06-15 Sat>
+:PROPERTIES:
+:EFFORT: 30min
+:END:
+Need to go to the store before dinner.
+** Milk
+2% milk, 1 gallon
+** Eggs
+** Bread
+Sourdough if available
+* DONE Fix bug #123 :work:code:
+CLOSED: [2024-06-14 Fri 16:30]
+The login page was timing out due to a missing index.
+* Projects
+** TODO Website redesign :work:
+:PROPERTIES:
+:EFFORT: 8h
+:ASSIGNED: alice
+:END:
+Redesign the landing page for Q3 launch.
+** WAITING Database migration :work:infra:
+Blocked on ops team approval.
+** NEXT Write documentation :work:
+* Inbox
+** Review PR from Bob
+** TODO Schedule dentist appointment :personal:
+** Read org-mode manual
