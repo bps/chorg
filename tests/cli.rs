@@ -1452,3 +1452,82 @@ fn cli_quiet_promote() {
     let stdout = String::from_utf8(output.stdout).unwrap();
     assert!(stdout.is_empty(), "demote -q should suppress stdout");
 }
+
+// ===========================================================================
+// Feature: batch mutations (multiple -p values)
+// ===========================================================================
+
+#[test]
+fn cli_batch_todo_multiple_paths() {
+    let f = tmp_org(FIXTURE);
+    // Task one (#1) is TODO, Project Alpha (#3.1) is TODO, Call plumber (#4.2) is TODO
+    run(&["todo", f.to_str().unwrap(), "-p", "#1", "-p", "#3.1", "-p", "#4.2", "DONE", "-i"]);
+    let content = fs::read_to_string(&f).unwrap();
+    assert!(content.contains("* DONE [#A] Task one"));
+    assert!(content.contains("* DONE Project Alpha"));
+    assert!(content.contains("* DONE Call plumber"));
+    // Others unchanged
+    assert!(content.contains("* DONE Task two"));  // was already DONE
+    assert!(content.contains("* NEXT Project Beta"));  // not touched
+}
+
+#[test]
+fn cli_batch_todo_with_quiet() {
+    let f = tmp_org(FIXTURE);
+    let output = run_raw(&[
+        "todo", f.to_str().unwrap(),
+        "-p", "#3.1", "-p", "#3.2",
+        "DONE", "-q",
+    ]);
+    assert!(output.status.success());
+    let stdout = String::from_utf8(output.stdout).unwrap();
+    assert!(stdout.is_empty(), "batch with -q should suppress stdout");
+    let stderr = String::from_utf8(output.stderr).unwrap();
+    // Both confirmations on stderr
+    assert!(stderr.contains("#3.1:"));
+    assert!(stderr.contains("#3.2:"));
+}
+
+#[test]
+fn cli_batch_todo_in_place() {
+    let f = tmp_org(FIXTURE);
+    run(&["todo", f.to_str().unwrap(), "-p", "Task one", "-p", "Projects/Project Alpha", "DONE", "-i"]);
+    let content = fs::read_to_string(&f).unwrap();
+    assert!(content.contains("* DONE [#A] Task one"));
+    assert!(content.contains("* DONE Project Alpha"));
+}
+
+#[test]
+fn cli_batch_todo_with_title_paths() {
+    let f = tmp_org(FIXTURE);
+    // Mix of title paths and dot addresses
+    run(&[
+        "todo", f.to_str().unwrap(),
+        "-p", "Task one",
+        "-p", "#3.1",
+        "DONE", "-i",
+    ]);
+    let content = fs::read_to_string(&f).unwrap();
+    assert!(content.contains("* DONE [#A] Task one"));
+    assert!(content.contains("* DONE Project Alpha"));
+}
+
+#[test]
+fn cli_batch_todo_single_path_still_works() {
+    // Backward compat: single -p should still work
+    let f = tmp_org(FIXTURE);
+    run(&["todo", f.to_str().unwrap(), "-p", "Task one", "DONE", "-i"]);
+    let content = fs::read_to_string(&f).unwrap();
+    assert!(content.contains("* DONE [#A] Task one"));
+}
+
+#[test]
+fn cli_batch_todo_bad_path_in_batch_fails() {
+    let f = tmp_org(FIXTURE);
+    let stderr = run_err(&[
+        "todo", f.to_str().unwrap(),
+        "-p", "#1", "-p", "#99",
+        "DONE", "-i",
+    ]);
+    assert!(stderr.contains("out of range"));
+}

@@ -89,9 +89,9 @@ enum Commands {
     /// Change the TODO keyword of a heading.
     Todo {
         file: PathBuf,
-        /// Heading path.
+        /// Heading path (repeatable for batch mutations).
         #[arg(short, long)]
-        path: String,
+        path: Vec<String>,
         /// New keyword (e.g. TODO, DONE). Use empty string to clear.
         state: String,
         /// Write changes back to the file.
@@ -725,9 +725,8 @@ fn cmd_find(
     Ok(())
 }
 
-fn cmd_todo(file: &PathBuf, path: &str, state: &str, in_place: bool, quiet: bool) -> Result<()> {
+fn cmd_todo(file: &PathBuf, paths: &[String], state: &str, in_place: bool, quiet: bool) -> Result<()> {
     let (_, mut doc) = read_doc(file)?;
-    let indices = orgpath::resolve(&doc, path)?;
 
     let new_kw = if state.is_empty() {
         None
@@ -735,16 +734,19 @@ fn cmd_todo(file: &PathBuf, path: &str, state: &str, in_place: bool, quiet: bool
         Some(state.to_string())
     };
 
-    let h = doc.heading_at_mut(&indices);
-    let old = h.keyword.clone();
-    h.keyword = new_kw.clone();
+    for path in paths {
+        let indices = orgpath::resolve(&doc, path)?;
+        let h = doc.heading_at_mut(&indices);
+        let old = h.keyword.clone();
+        h.keyword = new_kw.clone();
 
-    eprintln!(
-        "{}: {} → {}",
-        Heading::format_addr(&indices),
-        old.as_deref().unwrap_or("(none)"),
-        new_kw.as_deref().unwrap_or("(none)")
-    );
+        eprintln!(
+            "{}: {} → {}",
+            Heading::format_addr(&indices),
+            old.as_deref().unwrap_or("(none)"),
+            new_kw.as_deref().unwrap_or("(none)")
+        );
+    }
 
     emit(file, &doc, in_place, quiet)
 }
