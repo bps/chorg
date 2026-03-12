@@ -1367,3 +1367,88 @@ fn cli_find_no_match_empty_file_exit_code() {
     let output = run_raw(&["find", f.to_str().unwrap(), "--keyword", "TODO"]);
     assert_eq!(output.status.code(), Some(1));
 }
+
+// ===========================================================================
+// Feature: quiet mode (-q / --quiet)
+// ===========================================================================
+
+#[test]
+fn cli_quiet_suppresses_dry_run_stdout() {
+    let f = tmp_org(FIXTURE);
+    let output = run_raw(&["todo", f.to_str().unwrap(), "-p", "Task one", "DONE", "-q"]);
+    assert!(output.status.success());
+    let stdout = String::from_utf8(output.stdout).unwrap();
+    // Quiet mode: no file content on stdout
+    assert!(stdout.is_empty(), "stdout should be empty with -q, got: {}", stdout);
+    // Confirmation still on stderr
+    let stderr = String::from_utf8(output.stderr).unwrap();
+    assert!(stderr.contains("#1:"));
+    assert!(stderr.contains("TODO → DONE"));
+}
+
+#[test]
+fn cli_quiet_without_flag_shows_dry_run() {
+    let f = tmp_org(FIXTURE);
+    let output = run_raw(&["todo", f.to_str().unwrap(), "-p", "Task one", "DONE"]);
+    let stdout = String::from_utf8(output.stdout).unwrap();
+    // Without -q: full file on stdout
+    assert!(stdout.contains("* DONE"), "dry-run should show modified file");
+}
+
+#[test]
+fn cli_quiet_with_in_place_still_writes() {
+    let f = tmp_org(FIXTURE);
+    let output = run_raw(&["todo", f.to_str().unwrap(), "-p", "Task one", "DONE", "-i", "-q"]);
+    assert!(output.status.success());
+    // File should be modified
+    let content = fs::read_to_string(&f).unwrap();
+    assert!(content.contains("* DONE"));
+    assert!(content.contains("Task one"));
+}
+
+#[test]
+fn cli_quiet_edit() {
+    let f = tmp_org(FIXTURE);
+    let output = run_raw(&["edit", f.to_str().unwrap(), "-p", "#1", "--title", "New Title", "-q"]);
+    assert!(output.status.success());
+    let stdout = String::from_utf8(output.stdout).unwrap();
+    assert!(stdout.is_empty(), "edit -q should suppress stdout");
+}
+
+#[test]
+fn cli_quiet_delete() {
+    let f = tmp_org(FIXTURE);
+    let output = run_raw(&["delete", f.to_str().unwrap(), "-p", "#2", "-q"]);
+    assert!(output.status.success());
+    let stdout = String::from_utf8(output.stdout).unwrap();
+    assert!(stdout.is_empty(), "delete -q should suppress stdout");
+    let stderr = String::from_utf8(output.stderr).unwrap();
+    assert!(stderr.contains("deleted"));
+}
+
+#[test]
+fn cli_quiet_tag() {
+    let f = tmp_org(FIXTURE);
+    let output = run_raw(&["tag", f.to_str().unwrap(), "-p", "#1", "--add", "newtag", "-q"]);
+    assert!(output.status.success());
+    let stdout = String::from_utf8(output.stdout).unwrap();
+    assert!(stdout.is_empty(), "tag -q should suppress stdout");
+}
+
+#[test]
+fn cli_quiet_prop() {
+    let f = tmp_org(FIXTURE);
+    let output = run_raw(&["prop", f.to_str().unwrap(), "-p", "#1", "NEWKEY", "val", "-q"]);
+    assert!(output.status.success());
+    let stdout = String::from_utf8(output.stdout).unwrap();
+    assert!(stdout.is_empty(), "prop set -q should suppress stdout");
+}
+
+#[test]
+fn cli_quiet_promote() {
+    let f = tmp_org(FIXTURE);
+    let output = run_raw(&["demote", f.to_str().unwrap(), "-p", "#1", "-q"]);
+    assert!(output.status.success());
+    let stdout = String::from_utf8(output.stdout).unwrap();
+    assert!(stdout.is_empty(), "demote -q should suppress stdout");
+}

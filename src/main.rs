@@ -97,6 +97,9 @@ enum Commands {
         /// Write changes back to the file.
         #[arg(short, long)]
         in_place: bool,
+        /// Suppress dry-run output; only print the confirmation line.
+        #[arg(short, long)]
+        quiet: bool,
     },
 
     /// Insert a new heading.
@@ -126,6 +129,9 @@ enum Commands {
         /// Write changes back to the file.
         #[arg(short, long)]
         in_place: bool,
+        /// Suppress dry-run output; only print the confirmation line.
+        #[arg(short, long)]
+        quiet: bool,
     },
 
     /// Delete a heading and its entire subtree.
@@ -137,6 +143,9 @@ enum Commands {
         /// Write changes back to the file.
         #[arg(short, long)]
         in_place: bool,
+        /// Suppress dry-run output; only print the confirmation line.
+        #[arg(short, long)]
+        quiet: bool,
     },
 
     /// Move (refile) a heading under a new parent.
@@ -154,6 +163,9 @@ enum Commands {
         /// Write changes back to the file.
         #[arg(short, long)]
         in_place: bool,
+        /// Suppress dry-run output; only print the confirmation line.
+        #[arg(short, long)]
+        quiet: bool,
     },
 
     /// Edit heading fields (title, priority, body).
@@ -177,6 +189,9 @@ enum Commands {
         /// Write changes back to the file.
         #[arg(short, long)]
         in_place: bool,
+        /// Suppress dry-run output; only print the confirmation line.
+        #[arg(short, long)]
+        quiet: bool,
     },
 
     /// Get, set, or delete a property.
@@ -195,6 +210,9 @@ enum Commands {
         /// Write changes back to the file.
         #[arg(short, long)]
         in_place: bool,
+        /// Suppress dry-run output; only print the confirmation line.
+        #[arg(short, long)]
+        quiet: bool,
     },
 
     /// Modify tags on a heading.
@@ -218,6 +236,9 @@ enum Commands {
         /// Write changes back to the file.
         #[arg(short, long)]
         in_place: bool,
+        /// Suppress dry-run output; only print the confirmation line.
+        #[arg(short, long)]
+        quiet: bool,
     },
 
     /// Promote (decrease level) or demote (increase level) a heading and its subtree.
@@ -229,6 +250,9 @@ enum Commands {
         /// Write changes back to the file.
         #[arg(short, long)]
         in_place: bool,
+        /// Suppress dry-run output; only print the confirmation line.
+        #[arg(short, long)]
+        quiet: bool,
     },
     /// Demote a heading and its subtree.
     Demote {
@@ -239,6 +263,9 @@ enum Commands {
         /// Write changes back to the file.
         #[arg(short, long)]
         in_place: bool,
+        /// Suppress dry-run output; only print the confirmation line.
+        #[arg(short, long)]
+        quiet: bool,
     },
 }
 
@@ -280,7 +307,8 @@ fn main() -> Result<()> {
             path,
             state,
             in_place,
-        } => cmd_todo(&file, &path, &state, in_place),
+            quiet,
+        } => cmd_todo(&file, &path, &state, in_place, quiet),
 
         Commands::Insert {
             file,
@@ -292,15 +320,17 @@ fn main() -> Result<()> {
             body,
             position,
             in_place,
+            quiet,
         } => cmd_insert(
-            &file, &path, &title, keyword, priority, tags, body, position, in_place,
+            &file, &path, &title, keyword, priority, tags, body, position, in_place, quiet,
         ),
 
         Commands::Delete {
             file,
             path,
             in_place,
-        } => cmd_delete(&file, &path, in_place),
+            quiet,
+        } => cmd_delete(&file, &path, in_place, quiet),
 
         Commands::Move {
             file,
@@ -308,7 +338,8 @@ fn main() -> Result<()> {
             under,
             position,
             in_place,
-        } => cmd_move(&file, &path, &under, position, in_place),
+            quiet,
+        } => cmd_move(&file, &path, &under, position, in_place, quiet),
 
         Commands::Edit {
             file,
@@ -318,7 +349,8 @@ fn main() -> Result<()> {
             body,
             append,
             in_place,
-        } => cmd_edit(&file, &path, title, priority, body, append, in_place),
+            quiet,
+        } => cmd_edit(&file, &path, title, priority, body, append, in_place, quiet),
 
         Commands::Prop {
             file,
@@ -327,7 +359,8 @@ fn main() -> Result<()> {
             value,
             delete,
             in_place,
-        } => cmd_prop(&file, &path, &key, value, delete, in_place),
+            quiet,
+        } => cmd_prop(&file, &path, &key, value, delete, in_place, quiet),
 
         Commands::Tag {
             file,
@@ -337,19 +370,22 @@ fn main() -> Result<()> {
             set,
             clear,
             in_place,
-        } => cmd_tag(&file, &path, add, remove, set, clear, in_place),
+            quiet,
+        } => cmd_tag(&file, &path, add, remove, set, clear, in_place, quiet),
 
         Commands::Promote {
             file,
             path,
             in_place,
-        } => cmd_promote(&file, &path, -1, in_place),
+            quiet,
+        } => cmd_promote(&file, &path, -1, in_place, quiet),
 
         Commands::Demote {
             file,
             path,
             in_place,
-        } => cmd_promote(&file, &path, 1, in_place),
+            quiet,
+        } => cmd_promote(&file, &path, 1, in_place, quiet),
     }
 }
 
@@ -364,13 +400,13 @@ fn read_doc(file: &PathBuf) -> Result<(String, OrgDoc)> {
     Ok((text, doc))
 }
 
-fn emit(file: &PathBuf, doc: &OrgDoc, in_place: bool) -> Result<()> {
+fn emit(file: &PathBuf, doc: &OrgDoc, in_place: bool, quiet: bool) -> Result<()> {
     let text = writer::write(doc);
     if in_place {
         std::fs::write(file, &text)
             .with_context(|| format!("writing {}", file.display()))?;
         eprintln!("wrote {}", file.display());
-    } else {
+    } else if !quiet {
         print!("{}", text);
     }
     Ok(())
@@ -689,7 +725,7 @@ fn cmd_find(
     Ok(())
 }
 
-fn cmd_todo(file: &PathBuf, path: &str, state: &str, in_place: bool) -> Result<()> {
+fn cmd_todo(file: &PathBuf, path: &str, state: &str, in_place: bool, quiet: bool) -> Result<()> {
     let (_, mut doc) = read_doc(file)?;
     let indices = orgpath::resolve(&doc, path)?;
 
@@ -710,7 +746,7 @@ fn cmd_todo(file: &PathBuf, path: &str, state: &str, in_place: bool) -> Result<(
         new_kw.as_deref().unwrap_or("(none)")
     );
 
-    emit(file, &doc, in_place)
+    emit(file, &doc, in_place, quiet)
 }
 
 fn cmd_insert(
@@ -723,6 +759,7 @@ fn cmd_insert(
     body: Option<String>,
     position: Option<usize>,
     in_place: bool,
+    quiet: bool,
 ) -> Result<()> {
     let (_, mut doc) = read_doc(file)?;
 
@@ -752,7 +789,7 @@ fn cmd_insert(
         let pos = pos.min(doc.headings.len());
         doc.headings.insert(pos, h);
         eprintln!("inserted at {}", Heading::format_addr(&[pos]));
-        return emit(file, &doc, in_place);
+        return emit(file, &doc, in_place, quiet);
     } else {
         let indices = orgpath::resolve(&doc, parent_path)?;
         let parent = doc.heading_at(&indices);
@@ -783,10 +820,10 @@ fn cmd_insert(
     child_addr.push(pos);
     eprintln!("inserted at {}", Heading::format_addr(&child_addr));
 
-    emit(file, &doc, in_place)
+    emit(file, &doc, in_place, quiet)
 }
 
-fn cmd_delete(file: &PathBuf, path: &str, in_place: bool) -> Result<()> {
+fn cmd_delete(file: &PathBuf, path: &str, in_place: bool, quiet: bool) -> Result<()> {
     let (_, mut doc) = read_doc(file)?;
     let indices = orgpath::resolve(&doc, path)?;
 
@@ -795,7 +832,7 @@ fn cmd_delete(file: &PathBuf, path: &str, in_place: bool) -> Result<()> {
     list.remove(idx);
 
     eprintln!("deleted {} ({:?})", Heading::format_addr(&indices), title);
-    emit(file, &doc, in_place)
+    emit(file, &doc, in_place, quiet)
 }
 
 fn cmd_move(
@@ -804,6 +841,7 @@ fn cmd_move(
     under: &str,
     position: Option<usize>,
     in_place: bool,
+    quiet: bool,
 ) -> Result<()> {
     let (_, mut doc) = read_doc(file)?;
 
@@ -842,7 +880,7 @@ fn cmd_move(
         eprintln!("moved to {}", Heading::format_addr(&new_addr));
     }
 
-    emit(file, &doc, in_place)
+    emit(file, &doc, in_place, quiet)
 }
 
 fn cmd_edit(
@@ -853,6 +891,7 @@ fn cmd_edit(
     body: Option<String>,
     append: Option<String>,
     in_place: bool,
+    quiet: bool,
 ) -> Result<()> {
     let (_, mut doc) = read_doc(file)?;
     let indices = orgpath::resolve(&doc, path)?;
@@ -888,7 +927,7 @@ fn cmd_edit(
         }
     }
 
-    emit(file, &doc, in_place)
+    emit(file, &doc, in_place, quiet)
 }
 
 fn cmd_prop(
@@ -898,6 +937,7 @@ fn cmd_prop(
     value: Option<String>,
     delete: bool,
     in_place: bool,
+    quiet: bool,
 ) -> Result<()> {
     let (_, mut doc) = read_doc(file)?;
     let indices = orgpath::resolve(&doc, path)?;
@@ -910,7 +950,7 @@ fn cmd_prop(
             bail!("property {:?} not found", key);
         }
         eprintln!("deleted property {:?}", key);
-        return emit(file, &doc, in_place);
+        return emit(file, &doc, in_place, quiet);
     }
 
     if let Some(val) = value {
@@ -921,7 +961,7 @@ fn cmd_prop(
         } else {
             h.properties.push((key.to_string(), val));
         }
-        return emit(file, &doc, in_place);
+        return emit(file, &doc, in_place, quiet);
     }
 
     // Get
@@ -942,6 +982,7 @@ fn cmd_tag(
     set: Option<String>,
     clear: bool,
     in_place: bool,
+    quiet: bool,
 ) -> Result<()> {
     let (_, mut doc) = read_doc(file)?;
     let indices = orgpath::resolve(&doc, path)?;
@@ -980,10 +1021,10 @@ fn cmd_tag(
         h.tags.retain(|existing| !existing.eq_ignore_ascii_case(t));
     }
 
-    emit(file, &doc, in_place)
+    emit(file, &doc, in_place, quiet)
 }
 
-fn cmd_promote(file: &PathBuf, path: &str, delta: i32, in_place: bool) -> Result<()> {
+fn cmd_promote(file: &PathBuf, path: &str, delta: i32, in_place: bool, quiet: bool) -> Result<()> {
     let (_, mut doc) = read_doc(file)?;
     let indices = orgpath::resolve(&doc, path)?;
 
@@ -993,5 +1034,5 @@ fn cmd_promote(file: &PathBuf, path: &str, delta: i32, in_place: bool) -> Result
     }
     h.shift_level(delta);
 
-    emit(file, &doc, in_place)
+    emit(file, &doc, in_place, quiet)
 }
