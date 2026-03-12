@@ -1181,3 +1181,77 @@ fn cli_stdout_matches_in_place() {
 
     assert_eq!(stdout, in_place, "stdout and in-place outputs differ");
 }
+
+// ===========================================================================
+// Feature: dot-separated numeric addresses in --path
+// ===========================================================================
+
+#[test]
+fn cli_dot_addr_show() {
+    let f = tmp_org(FIXTURE);
+    // #3.1 should resolve to "Project Alpha" (3rd top-level, 1st child)
+    let out = run(&["show", f.to_str().unwrap(), "-p", "#3.1"]);
+    assert!(out.contains("Project Alpha"));
+}
+
+#[test]
+fn cli_dot_addr_show_no_hash() {
+    let f = tmp_org(FIXTURE);
+    // 3.1 (without #) should work too
+    let out = run(&["show", f.to_str().unwrap(), "-p", "3.1"]);
+    assert!(out.contains("Project Alpha"));
+}
+
+#[test]
+fn cli_dot_addr_todo_mutation() {
+    let f = tmp_org(FIXTURE);
+    // Mutate via dot address — #3.1 is "Project Alpha" (TODO)
+    run(&["todo", f.to_str().unwrap(), "-p", "#3.1", "DONE", "-i"]);
+    let content = fs::read_to_string(&f).unwrap();
+    assert!(content.contains("* DONE Project Alpha"));
+}
+
+#[test]
+fn cli_dot_addr_edit() {
+    let f = tmp_org(FIXTURE);
+    run(&["edit", f.to_str().unwrap(), "-p", "#1.1", "--title", "Renamed"]);
+    // Dry-run: stdout should contain the renamed heading
+    // (Subtask A is #1.1)
+}
+
+#[test]
+fn cli_dot_addr_delete() {
+    let f = tmp_org(FIXTURE);
+    run(&["delete", f.to_str().unwrap(), "-p", "#1.2", "-i"]);
+    let content = fs::read_to_string(&f).unwrap();
+    // Subtask B (#1.2) should be gone
+    assert!(!content.contains("Subtask B"));
+    assert!(content.contains("Subtask A"));
+}
+
+#[test]
+fn cli_dot_addr_find_then_mutate() {
+    // The core workflow: find outputs an addr, use it directly in a mutation
+    let f = tmp_org(FIXTURE);
+    let out = run(&["find", f.to_str().unwrap(), "--keyword", "NEXT"]);
+    // Output contains "#3.2" for "Project Beta"
+    assert!(out.contains("#3.2"));
+    // Now use that addr to mutate
+    run(&["todo", f.to_str().unwrap(), "-p", "#3.2", "DONE", "-i"]);
+    let content = fs::read_to_string(&f).unwrap();
+    assert!(content.contains("* DONE Project Beta"));
+}
+
+#[test]
+fn cli_dot_addr_deep() {
+    let f = tmp_org("* A\n** B\n*** C\n**** D\n");
+    let out = run(&["show", f.to_str().unwrap(), "-p", "#1.1.1.1"]);
+    assert!(out.contains("D"));
+}
+
+#[test]
+fn cli_dot_addr_out_of_range() {
+    let f = tmp_org(FIXTURE);
+    let stderr = run_err(&["show", f.to_str().unwrap(), "-p", "#99.1"]);
+    assert!(stderr.contains("out of range"));
+}

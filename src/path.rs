@@ -8,9 +8,17 @@ use anyhow::{bail, Context, Result};
 ///   - `#N` — positional (1-based) at that level
 ///   - Bare text — case-insensitive exact match, then substring fallback
 ///   - Multiple matches → error with suggestions
+///   - `#1.2.3` or `1.2.3` — dot-separated numeric address (as output by show/find)
 ///
-/// Examples: `"Projects/Website"`, `"#1/#2"`, `"#3/Website"`
+/// Examples: `"Projects/Website"`, `"#1/#2"`, `"#3/Website"`, `"#1.2"`, `"1.2"`
 pub fn resolve(doc: &OrgDoc, path: &str) -> Result<Vec<usize>> {
+    // Check if this is a dot-separated numeric address like "#1.2" or "1.2"
+    let trimmed = path.trim();
+    let addr_str = trimmed.strip_prefix('#').unwrap_or(trimmed);
+    if is_numeric_addr(addr_str) {
+        return resolve_numeric_addr(doc, addr_str);
+    }
+
     let segments: Vec<&str> = path.split('/').collect();
     let mut indices: Vec<usize> = Vec::new();
     let mut current_list: &[Heading] = &doc.headings;
@@ -22,6 +30,40 @@ pub fn resolve(doc: &OrgDoc, path: &str) -> Result<Vec<usize>> {
         }
         let idx = resolve_segment(current_list, seg, &indices)
             .with_context(|| format!("resolving segment {:?} at depth {}", seg, depth + 1))?;
+        indices.push(idx);
+        current_list = &current_list[idx].children;
+    }
+
+    Ok(indices)
+}
+
+/// Check if a string is a dot-separated numeric address like "1.2.3".
+fn is_numeric_addr(s: &str) -> bool {
+    if s.is_empty() {
+        return false;
+    }
+    s.split('.').all(|part| !part.is_empty() && part.chars().all(|c| c.is_ascii_digit()))
+}
+
+/// Resolve a dot-separated numeric address like "1.2.3" into 0-based index coordinates.
+fn resolve_numeric_addr(doc: &OrgDoc, addr: &str) -> Result<Vec<usize>> {
+    let parts: Vec<&str> = addr.split('.').collect();
+    let mut indices: Vec<usize> = Vec::new();
+    let mut current_list: &[Heading] = &doc.headings;
+
+    for (depth, part) in parts.iter().enumerate() {
+        let n: usize = part
+            .parse()
+            .with_context(|| format!("invalid numeric address segment {:?}", part))?;
+        if n == 0 || n > current_list.len() {
+            bail!(
+                "positional index {} out of range (1..{}) at depth {}",
+                n,
+                current_list.len(),
+                depth + 1
+            );
+        }
+        let idx = n - 1;
         indices.push(idx);
         current_list = &current_list[idx].children;
     }
@@ -323,6 +365,58 @@ mod tests {
         let doc = parse("* A\n** B\n*** C\n**** D\n***** E\n");
         assert_eq!(resolve(&doc, "A/B/C/D/E").unwrap(), vec![0, 0, 0, 0, 0]);
         assert_eq!(resolve(&doc, "#1/#1/#1/#1/#1").unwrap(), vec![0, 0, 0, 0, 0]);
+    }
+
+    // -----------------------------------------------------------------------
+    // Dot-separated numeric address resolution
+    // -----------------------------------------------------------------------
+
+    #[test]
+    fn resolve_dot_addr_single() {
+        let doc = sample_doc();
+        assert_eq!(resolve(&doc, "#1").unwrap(), vec![0]);
+        assert_eq!(resolve(&doc, "1").unwrap(), vec![0]);
+        assert_eq!(resolve(&doc, "#3").unwrap(), vec![2]);
+        assert_eq!(resolve(&doc, "3").unwrap(), vec![2]);
+    }
+
+    #[test]
+    fn resolve_dot_addr_nested() {
+        let doc = sample_doc();
+        assert_eq!(resolve(&doc, "#1.1").unwrap(), vec![0, 0]);
+        assert_eq!(resolve(&doc, "1.1").unwrap(), vec![0, 0]);
+        assert_eq!(resolve(&doc, "#1.2").unwrap(), vec![0, 1]);
+        assert_eq!(resolve(&doc, "1.2").unwrap(), vec![0, 1]);
+        assert_eq!(resolve(&doc, "#2.3").unwrap(), vec![1, 2]);
+        assert_eq!(resolve(&doc, "2.3").unwrap(), vec![1, 2]);
+    }
+
+    #[test]
+    fn resolve_dot_addr_with_whitespace() {
+        let doc = sample_doc();
+        assert_eq!(resolve(&doc, " #1.2 ").unwrap(), vec![0, 1]);
+        assert_eq!(resolve(&doc, " 1.2 ").unwrap(), vec![0, 1]);
+    }
+
+    #[test]
+    fn resolve_dot_addr_zero_error() {
+        let doc = sample_doc();
+        let err = resolve(&doc, "#0.1").unwrap_err();
+        assert!(format!("{:#}", err).contains("out of range"));
+    }
+
+    #[test]
+    fn resolve_dot_addr_overflow_error() {
+        let doc = sample_doc();
+        let err = resolve(&doc, "#99.1").unwrap_err();
+        assert!(format!("{:#}", err).contains("out of range"));
+    }
+
+    #[test]
+    fn resolve_dot_addr_deep() {
+        let doc = parse("* A\n** B\n*** C\n**** D\n***** E\n");
+        assert_eq!(resolve(&doc, "#1.1.1.1.1").unwrap(), vec![0, 0, 0, 0, 0]);
+        assert_eq!(resolve(&doc, "1.1.1.1.1").unwrap(), vec![0, 0, 0, 0, 0]);
     }
 
     // -----------------------------------------------------------------------
