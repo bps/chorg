@@ -1255,3 +1255,69 @@ fn cli_dot_addr_out_of_range() {
     let stderr = run_err(&["show", f.to_str().unwrap(), "-p", "#99.1"]);
     assert!(stderr.contains("out of range"));
 }
+
+// ===========================================================================
+// Feature: full title path in JSON output
+// ===========================================================================
+
+#[test]
+fn cli_json_path_field_show() {
+    let f = tmp_org(FIXTURE);
+    let out = run(&["show", f.to_str().unwrap(), "--json"]);
+    let json: serde_json::Value = serde_json::from_str(&out).expect("invalid JSON");
+    let headings = json["headings"].as_array().unwrap();
+    // Top-level: path == title
+    assert_eq!(headings[0]["path"], "Task one");
+    // Nested children should have slash-separated paths
+    let children = headings[0]["children"].as_array().unwrap();
+    assert_eq!(children[0]["path"], "Task one/Subtask A");
+    assert_eq!(children[1]["path"], "Task one/Subtask B");
+}
+
+#[test]
+fn cli_json_path_field_show_subtree() {
+    let f = tmp_org(FIXTURE);
+    let out = run(&["show", f.to_str().unwrap(), "--json", "-p", "Projects"]);
+    let json: serde_json::Value = serde_json::from_str(&out).expect("invalid JSON");
+    let h = &json["headings"].as_array().unwrap()[0];
+    assert_eq!(h["path"], "Projects");
+    let children = h["children"].as_array().unwrap();
+    assert_eq!(children[0]["path"], "Projects/Project Alpha");
+    assert_eq!(children[1]["path"], "Projects/Project Beta");
+}
+
+#[test]
+fn cli_json_path_field_find() {
+    let f = tmp_org(FIXTURE);
+    let out = run(&["find", f.to_str().unwrap(), "--keyword", "TODO", "--json"]);
+    let json: serde_json::Value = serde_json::from_str(&out).expect("invalid JSON");
+    let arr = json.as_array().unwrap();
+    // Collect all paths
+    let paths: Vec<&str> = arr.iter().map(|h| h["path"].as_str().unwrap()).collect();
+    assert!(paths.contains(&"Task one"));
+    assert!(paths.contains(&"Projects/Project Alpha"));
+    assert!(paths.contains(&"Inbox/Call plumber"));
+}
+
+#[test]
+fn cli_json_path_field_find_deep() {
+    let f = tmp_org("* A\n** B\n*** TODO C\n");
+    let out = run(&["find", f.to_str().unwrap(), "--keyword", "TODO", "--json"]);
+    let json: serde_json::Value = serde_json::from_str(&out).expect("invalid JSON");
+    let arr = json.as_array().unwrap();
+    assert_eq!(arr[0]["path"], "A/B/C");
+}
+
+#[test]
+fn cli_json_path_usable_in_path_flag() {
+    // The path field from JSON should work as --path input
+    let f = tmp_org(FIXTURE);
+    let out = run(&["find", f.to_str().unwrap(), "--keyword", "NEXT", "--json"]);
+    let json: serde_json::Value = serde_json::from_str(&out).expect("invalid JSON");
+    let arr = json.as_array().unwrap();
+    let path = arr[0]["path"].as_str().unwrap();
+    // Use that path string to mutate
+    run(&["todo", f.to_str().unwrap(), "-p", path, "DONE", "-i"]);
+    let content = fs::read_to_string(&f).unwrap();
+    assert!(content.contains("* DONE Project Beta"));
+}

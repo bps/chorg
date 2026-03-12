@@ -438,6 +438,7 @@ struct JsonOutline {
 #[derive(Serialize)]
 struct JsonHeading {
     addr: String,
+    path: String,
     level: usize,
     #[serde(skip_serializing_if = "Option::is_none")]
     keyword: Option<String>,
@@ -462,7 +463,7 @@ struct JsonProperty {
     value: String,
 }
 
-fn heading_to_json(h: &Heading, addr: &[usize], depth: Option<usize>) -> JsonHeading {
+fn heading_to_json(h: &Heading, addr: &[usize], depth: Option<usize>, doc: &OrgDoc) -> JsonHeading {
     let children = if depth.map_or(true, |d| d > 0) {
         let child_depth = depth.map(|d| d.saturating_sub(1));
         h.children
@@ -471,7 +472,7 @@ fn heading_to_json(h: &Heading, addr: &[usize], depth: Option<usize>) -> JsonHea
             .map(|(i, c)| {
                 let mut a = addr.to_vec();
                 a.push(i);
-                heading_to_json(c, &a, child_depth)
+                heading_to_json(c, &a, child_depth, doc)
             })
             .collect()
     } else {
@@ -480,6 +481,7 @@ fn heading_to_json(h: &Heading, addr: &[usize], depth: Option<usize>) -> JsonHea
 
     JsonHeading {
         addr: Heading::format_addr(addr),
+        path: Heading::format_title_path(doc, addr),
         level: h.level,
         keyword: h.keyword.clone(),
         priority: h.priority,
@@ -511,7 +513,7 @@ fn cmd_show(
             let h = doc.heading_at(&indices);
             JsonOutline {
                 preamble: None,
-                headings: vec![heading_to_json(h, &indices, depth)],
+                headings: vec![heading_to_json(h, &indices, depth, &doc)],
             }
         } else {
             JsonOutline {
@@ -524,7 +526,7 @@ fn cmd_show(
                     .headings
                     .iter()
                     .enumerate()
-                    .map(|(i, h)| heading_to_json(h, &[i], depth))
+                    .map(|(i, h)| heading_to_json(h, &[i], depth, &doc))
                     .collect(),
             }
         };
@@ -666,7 +668,7 @@ fn cmd_find(
     if json {
         let results: Vec<JsonHeading> = matches
             .iter()
-            .map(|(addr, h)| heading_to_json(h, addr, Some(0)))
+            .map(|(addr, h)| heading_to_json(h, addr, Some(0), &doc))
             .collect();
         println!("{}", serde_json::to_string_pretty(&results)?);
     } else {
