@@ -681,6 +681,11 @@ fn cmd_find(
             print!("{}", out);
         }
     }
+
+    if matches.is_empty() {
+        std::process::exit(1);
+    }
+
     Ok(())
 }
 

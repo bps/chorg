@@ -99,15 +99,15 @@ fn cli_find_no_filters() {
 #[test]
 fn cli_find_all_filters_no_match() {
     let f = tmp_org("* TODO A :work:\n:PROPERTIES:\n:ID: x\n:END:\n");
-    let out = run(&[
+    let stderr = run_err(&[
         "find", f.to_str().unwrap(),
         "--keyword", "DONE",
         "--tag", "personal",
         "--title", "zzz",
         "--property", "NONEXISTENT",
     ]);
-    // No match — stdout empty
-    assert!(out.is_empty() || !out.contains("*"));
+    // No match — exit non-zero
+    assert!(stderr.contains("no matches"));
 }
 
 #[test]
@@ -121,8 +121,8 @@ fn cli_find_property_with_value() {
 #[test]
 fn cli_find_on_empty_file() {
     let f = tmp_org("");
-    let out = run(&["find", f.to_str().unwrap(), "--keyword", "TODO"]);
-    assert!(out.is_empty() || !out.contains("*"));
+    let stderr = run_err(&["find", f.to_str().unwrap(), "--keyword", "TODO"]);
+    assert!(stderr.contains("no matches"));
 }
 
 // ===================================================================
