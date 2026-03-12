@@ -1,226 +1,99 @@
 ---
 name: chorg
-description: Make structured changes to org-mode files — change TODO state, insert/delete/move headings, edit fields, search. Use when asked to modify .org files.
-compatibility: Requires the chorg binary on PATH
+description: Structured org-mode file editing via the chorg CLI. Use when you need to read, query, or mutate org headings, TODO states, tags, properties, or hierarchy — instead of raw text editing which can break org structure.
 ---
 
-## What this tool does
+# chorg
 
-`chorg` reads an org file, parses it into a heading tree, and performs a
-single structural operation — change a TODO state, insert or delete a
-heading, move it, edit its title/body/tags/properties, etc. It writes
-valid org back out, either to stdout or in-place with `-i`.
+A structured org-mode editor. Prefer `chorg` over raw text editing (`edit`) whenever you need to manipulate org heading structure, TODO keywords, tags, or properties.
 
-Every heading gets a *positional address* like `#1`, `#3.2`. Use
-`chorg show` first to see the outline and addresses, then reference those
-addresses in subsequent commands.
+## Core workflow
 
-## Workflow
+1. **Orient** — run `chorg show <file>` to see the outline and discover heading paths
+2. **Find** — use `chorg find` to locate headings by keyword, tag, title, or property
+3. **Mutate** — use the appropriate command with `-i` to edit in place
 
-Always follow this pattern:
+## Path addressing
 
-1. **Read** — run `chorg show <file>` to see the outline with addresses.
-2. **Address** — identify the heading you need using its address or title path.
-3. **Act** — run the mutation command with `-i` to apply the change.
-4. **Verify** — run `chorg show` again if needed.
-
-## Addressing headings
-
-The `-p` flag accepts heading paths. Two styles, freely mixed:
-
-| Style | Example | Meaning |
-|-------|---------|---------|
-| Title | `"Projects/Website"` | Case-insensitive match, substring fallback |
-| Positional | `"#3/#1"` | 1-based index at each level |
-
-Use `"/"` for top-level operations (e.g. inserting a root heading).
-
-If a title matches multiple siblings, chorg errors and suggests positional
-addresses. Use `#N` to disambiguate.
-
-## Command reference
-
-### See the outline
+`--path` accepts either *title-based paths* or *numeric addresses*:
 
 ```bash
-chorg show FILE                        # full outline
-chorg show FILE -p "Projects"          # subtree only
-chorg show FILE -d 1                   # limit depth
-chorg show FILE --content              # include body text
-chorg show FILE --json                 # structured JSON output
+chorg show file.org -p "Project Alpha/Task two"     # title path
+chorg show file.org -p "#1.2"                        # numeric address
+chorg show file.org -p "1.2"                         # numeric (# optional)
 ```
 
-### Search
+Use `/` alone to refer to the document root (e.g., inserting a top-level heading).
+
+Numeric addresses from `show`/`find` output can be passed directly to mutation commands — no need to reconstruct title paths. JSON output also includes a `"path"` field with the full title path.
+
+## Commands
+
+### Reading
 
 ```bash
-chorg find FILE --keyword TODO
-chorg find FILE --tag work
-chorg find FILE --tag work --tag urgent             # require ALL tags
-chorg find FILE --title "redesign"
-chorg find FILE --body "authentication"             # search body text
-chorg find FILE --property EFFORT
-chorg find FILE --property EFFORT=8h                # key=value match
-chorg find FILE --keyword TODO --tag work           # combine filters (AND)
-chorg find FILE --under "Projects" --keyword TODO   # search only under a heading
-chorg find FILE --no-keyword DONE                   # exclude by keyword
-chorg find FILE --no-tag archive                    # exclude by tag
-chorg find FILE --max-level 1                       # top-level headings only
-chorg find FILE --min-level 2 --max-level 3         # level range
-chorg find FILE --scheduled                         # has SCHEDULED timestamp
-chorg find FILE --deadline                          # has DEADLINE timestamp
-chorg find FILE --json                              # JSON output
+chorg show file.org                         # full outline
+chorg show file.org -p "Section" -d 1       # one level deep
+chorg show file.org --content               # include body text
+chorg show file.org --json                  # structured output
+
+chorg find file.org --keyword TODO          # all TODOs
+chorg find file.org --tag urgent            # by tag
+chorg find file.org --title "meeting"       # substring match
+chorg find file.org --property "ID=abc"     # by property
+chorg find file.org --under "Projects"      # scoped search
+chorg find file.org --keyword TODO --json   # JSON output
 ```
 
-### Change TODO state
+### Mutating (always pass `-i` to write changes back)
 
 ```bash
-chorg todo FILE -p "#1" DONE -i        # set keyword
-chorg todo FILE -p "Buy groceries" "" -i  # clear keyword
+# TODO state
+chorg todo -p "Section/Task" file.org DONE -i
+chorg todo -p "#1.2" file.org DONE -i              # numeric address
+chorg todo -p "#1.2" -p "#3.1" file.org DONE -i    # batch: multiple headings
+chorg todo -p "Section/Task" file.org "" -i         # clear keyword
+
+# Insert heading
+chorg insert -p "Parent" --title "New item" --keyword TODO file.org -i
+chorg insert -p "/" --title "Top-level" file.org -i   # at root
+
+# Edit fields
+chorg edit -p "Section/Task" --title "Renamed" file.org -i
+chorg edit -p "Section/Task" --body "New body" file.org -i
+chorg edit -p "Section/Task" --append "Added text" file.org -i
+
+# Tags
+chorg tag -p "Section/Task" --add urgent file.org -i
+chorg tag -p "Section/Task" --remove old file.org -i
+chorg tag -p "Section/Task" --set "a:b:c" file.org -i
+
+# Properties
+chorg prop -p "Section/Task" file.org KEY VALUE -i   # set
+chorg prop -p "Section/Task" file.org KEY             # get
+chorg prop -p "Section/Task" file.org KEY --delete -i # delete
+
+# Structure
+chorg move -p "Section/Task" --under "Other Section" file.org -i
+chorg delete -p "Section/Task" file.org -i
+chorg promote -p "Section/Task" file.org -i
+chorg demote -p "Section/Task" file.org -i
 ```
 
-### Insert a heading
+## Tips
+
+- **Omitting `-i`** prints the result to stdout without modifying the file — useful for dry runs. Add `-q` to suppress the full output and only see the confirmation on stderr.
+- **Numeric addresses** (`#1.2`) from `show`/`find` output work directly in `--path` — prefer these over title paths when you already have them.
+- **Batch mutations** — pass multiple `-p` flags to apply the same operation to several headings in one invocation.
+- **`find` exits 1** when nothing matches — use this for conditional logic.
+- **`find --json`** and **`show --json`** include both `"addr"` and `"path"` fields, so you can use either addressing style.
+- **`show --content`** includes body text; without it you only see the heading tree.
+- **`insert --position N`** and **`move --position N`** control sibling order (1-based; default: append).
+
+## Preferred agent workflow
 
 ```bash
-chorg insert FILE -p "Projects" --title "New project" -i
-chorg insert FILE -p "Projects" --title "Urgent" --keyword TODO --priority A --tags "work:urgent" -i
-chorg insert FILE -p "/" --title "Top-level" -i          # insert at root
-chorg insert FILE -p "Projects" --title "First" -n 1 -i  # insert at position
-chorg insert FILE -p "#3" --title "Task" --body "Details here" -i
+# Find headings, then act on them using the addresses directly
+chorg find file.org --keyword TODO --json   # → get addr/path values
+chorg todo -p "#1.2" -p "#3.1" file.org DONE -i
 ```
-
-### Delete a heading (and its subtree)
-
-```bash
-chorg delete FILE -p "Inbox/Old item" -i
-chorg delete FILE -p "#4.2" -i
-```
-
-### Move (refile) a heading
-
-```bash
-chorg move FILE -p "Inbox/Review PR" --under "Projects" -i
-chorg move FILE -p "#4.1" --under "#3" -i
-chorg move FILE -p "Projects/Alpha" --under "/" -i        # move to top level
-chorg move FILE -p "#1" --under "Archive" -n 1 -i        # move to first position
-```
-
-Levels adjust automatically. Moving a level-2 heading under a level-3
-parent makes it level 4; its children shift accordingly.
-
-### Edit heading fields
-
-```bash
-chorg edit FILE -p "#1" --title "New title" -i
-chorg edit FILE -p "#1" --priority A -i      # set priority
-chorg edit FILE -p "#1" --priority "" -i     # clear priority
-chorg edit FILE -p "#1" --body "Replaced body" -i
-chorg edit FILE -p "#1" --append "Extra line" -i
-```
-
-### Properties
-
-```bash
-chorg prop FILE -p "#1" EFFORT              # get value
-chorg prop FILE -p "#1" EFFORT 4h -i        # set value
-chorg prop FILE -p "#1" EFFORT --delete -i  # delete key
-```
-
-### Tags
-
-```bash
-chorg tag FILE -p "#1"                       # display tags
-chorg tag FILE -p "#1" --add urgent -i
-chorg tag FILE -p "#1" --remove old -i
-chorg tag FILE -p "#1" --set "a:b:c" -i      # replace all
-chorg tag FILE -p "#1" --clear -i
-```
-
-### Promote / demote
-
-```bash
-chorg promote FILE -p "#3.1" -i   # decrease level by 1
-chorg demote FILE -p "#2" -i     # increase level by 1
-```
-
-## Worked examples
-
-### Mark a task done
-
-```
-$ chorg show todo.org
-#1       TODO [#A] Buy groceries :shopping:
-#1.1     Milk
-#1.2     Eggs
-#2       DONE Fix bug :work:
-#3       Projects
-#3.1     TODO Website redesign :work:
-#3.2     NEXT Write docs :work:
-
-$ chorg todo todo.org -p "#3.1" DONE -i
-
-$ chorg show todo.org
-#1       TODO [#A] Buy groceries :shopping:
-#1.1     Milk
-#1.2     Eggs
-#2       DONE Fix bug :work:
-#3       Projects
-#3.1     DONE Website redesign :work:
-#3.2     NEXT Write docs :work:
-```
-
-### Refile an inbox item
-
-```
-$ chorg show tasks.org
-#1       Inbox
-#1.1     Review security audit
-#1.2     TODO Draft blog post
-#2       Projects
-#2.1     TODO Website :work:
-#3       Archive
-
-$ chorg move tasks.org -p "#1.1" --under "#2" -i
-
-$ chorg show tasks.org
-#1       Inbox
-#1.1     TODO Draft blog post
-#2       Projects
-#2.1     TODO Website :work:
-#2.2     Review security audit
-#3       Archive
-```
-
-### Add a project with subtasks
-
-```
-$ chorg insert tasks.org -p "Projects" --title "API redesign" --keyword TODO --tags work -i
-$ chorg insert tasks.org -p "Projects/API redesign" --title "Design doc" --keyword TODO -i
-$ chorg insert tasks.org -p "Projects/API redesign" --title "Prototype" --keyword TODO -i
-
-$ chorg show tasks.org -p "Projects/API redesign"
-#2.3     TODO API redesign :work:
-#2.3.1   TODO Design doc
-#2.3.2   TODO Prototype
-```
-
-### Find and batch-process
-
-```
-$ chorg find tasks.org --keyword TODO --tag work
-#2.1     TODO Website :work:
-#2.3     TODO API redesign :work:
-
-$ chorg todo tasks.org -p "#2.1" DONE -i
-$ chorg todo tasks.org -p "#2.3" WAITING -i
-```
-
-## Key behaviors
-
-- **Stdout by default** — mutation commands print the modified file to
-  stdout. Pass `-i` to write in place.
-- **Round-trip safe** — unmodified headings are preserved byte-for-byte.
-- **Addresses shift** — after inserting or deleting, positional addresses
-  change. Re-run `show` if you need to issue further commands.
-- **Substring matching** — title paths match case-insensitively, with
-  exact match preferred over substring. Ambiguity produces an error
-  listing the candidates with their positional addresses.
