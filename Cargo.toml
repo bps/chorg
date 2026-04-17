@@ -3,6 +3,7 @@ name = "chorg"
 version = "0.1.0"
 edition = "2021"
 description = "Structured org-mode document editor for humans and LLM agents"
+license = "MIT"
 
 [dependencies]
 clap = { version = "4", features = ["derive"] }
